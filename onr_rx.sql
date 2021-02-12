@@ -90,4 +90,68 @@ SELECT SUM(overdose_deaths), fipscounty
 FROM overdose_deaths
 GROUP BY fipscounty
 
-/*Is there any association between a particular type of opioid and number of overdose deaths?*/
+-- 2/11/2021 Updates
+/* Q5: Is there any association between a particular type of opioid and number of overdose deaths?*/
+WITH CTE AS (
+	SELECT drug_name, generic_name, long_acting_opioid_drug_flag
+	FROM drug
+	WHERE opioid_drug_flag = 'Y'
+)
+SELECT DISTINCT(generic_name), overdose_deaths, generic_name, long_acting_opioid_drug_flag
+FROM prescription AS p1
+INNER JOIN CTE
+USING (drug_name)
+INNER JOIN prescriber AS p2
+USING (npi)
+INNER JOIN zip_fips AS z
+ON p2.nppes_provider_zip5 = z.zip
+INNER JOIN overdose_deaths AS o
+USING (fipscounty)
+WHERE z.fipscounty LIKE '47%'
+GROUP BY overdose_deaths, generic_name, long_acting_opioid_drug_flag;
+
+-- Isolating deaths per county in TN
+WITH CTE AS (
+	SELECT fipscounty, SUM(overdose_deaths)
+	FROM overdose_deaths
+	GROUP BY fipscounty
+)
+-- Bringing in other tables of interest
+SELECT *
+FROM zip_fips AS z
+WHERE fipscounty LIKE '47%'
+INNER JOIN CTE
+USING (fipscounty)
+
+-- find how many zip codes in TN split across multiple counties
+SELECT zip, COUNT(zip)
+FROM zip_fips
+WHERE fipscounty LIKE '47%'
+GROUP BY zip
+ORDER BY count(zip) DESC;
+
+-- find out whether/how zip codes are distributed across multiple counties
+SELECT zip, fipscounty, MAX(tot_ratio)
+FROM zip_fips
+WHERE fipscounty LIKE '47%'
+GROUP BY zip, fipscounty
+ORDER BY zip;
+
+-- Q: how do we select a singular zip code and county match based on highest max(tot_ratio) value?
+SELECT zip, fipscounty, MAX(tot_ratio) AS highest_ratio
+FROM zip_fips
+WHERE fipscounty LIKE '47%'
+GROUP BY zip, fipscounty
+ORDER BY zip;
+
+-- solution: window function!!!	
+SELECT
+	fipscounty, zip, MAX(tot_ratio) AS highest_ratio,
+	RANK() OVER(
+		PARTITION BY zip
+		ORDER BY MAX(tot_ratio) DESC)
+FROM zip_fips
+WHERE fipscounty LIKE '47%' AND zip IN('37027', '37211') 
+GROUP BY fipscounty, zip;
+
+-- next step: if rank = 1 then fipscounty = our choice
