@@ -187,3 +187,115 @@ elb<-elb +
 ggplotly(elb,tooltip = "text")
 ```
 
+```{r}
+# Question 3
+q3_query = "SELECT *
+FROM drug AS d
+INNER JOIN prescription AS p2
+USING (drug_name)
+INNER JOIN prescriber AS p1
+USING (npi)
+INNER JOIN zip_fips AS z
+ON p1.nppes_provider_zip5 = z.zip
+INNER JOIN fips_county as f
+USING (fipscounty)
+INNER JOIN overdose_deaths as o
+USING (fipscounty)
+WHERE f.state = 'TN' AND opioid_drug_flag = 'Y' AND YEAR BETWEEN 2015 AND 2018
+ORDER BY overdose_deaths DESC;"
+
+q3_res <- dbSendQuery(con, q3_query)
+```
+
+```{r}
+od_trend <- dbFetch(q3_res)
+
+# It is good practice to clear the result after fetching what you need in order to free all resources associated with the result set. 
+dbClearResult(q3_res)
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+# Question 5
+query2 = "With CTE AS (
+	SELECT
+	fipscounty, zip, tot_ratio AS highest_ratio,
+	RANK() OVER(
+		PARTITION BY zip
+		ORDER BY tot_ratio DESC)
+	FROM zip_fips
+	WHERE fipscounty LIKE '47%'
+	ORDER BY zip
+),
+CTE2 AS (
+	SELECT fipscounty, zip
+	FROM CTE
+	WHERE rank = 1)
+SELECT p.npi, CTE2.zip, CTE2.fipscounty, fp.county, drug_name, generic_name, p.total_day_supply, p.total_claim_count, 
+CASE WHEN d.generic_name LIKE '%%CODEINE%%' THEN 'CODEINE'
+            WHEN d.generic_name LIKE '%%FENTANYL%%' THEN 'FENTANYL'
+            WHEN d.generic_name LIKE '%%HYDROCODONE%%' THEN 'HYDROCODONE'
+            WHEN d.generic_name LIKE '%%MORPHINE%%' THEN 'MORPHINE'
+            WHEN d.generic_name LIKE '%%OXYCODONE%%' THEN 'OXYCODONE'
+            WHEN d.generic_name LIKE '%%OXYMORPHONE%%' THEN 'OXYMORPHONE'
+            WHEN d.generic_name LIKE '%%TRAMADOL%%' THEN 'TRAMADOL'
+            ELSE 'other' END 
+            AS opioid
+FROM drug AS d
+INNER JOIN prescription as p
+USING (drug_name)
+INNER JOIN prescriber as p2
+USING (npi)
+INNER JOIN CTE2
+On p2.nppes_provider_zip5 = CTE2.zip
+INNER JOIN fips_county AS fp
+USING(fipscounty)
+WHERE opioid_drug_flag = 'Y'
+ORDER BY p.total_day_supply desc;"
+
+res2 <- dbSendQuery(con, query2)
+```
+
+```{r}
+drugs <- dbFetch(res2)
+
+# It is good practice to clear the result after fetching what you need in order to free all resources associated with the result set. 
+dbClearResult(res2)
+```
+
+```{r}
+query1 = "SELECT fipscounty, SUM(overdose_deaths) AS deaths_fipscounty, population
+FROM overdose_deaths
+INNER JOIN population
+USING(fipscounty)
+GROUP BY fipscounty, population;"
+
+res1 <- dbSendQuery(con, query1)
+```
+
+```{r}
+overdose_deaths <- dbFetch(res1)
+
+# It is good practice to clear the result after fetching what you need in order to free all resources associated with the result set. 
+dbClearResult(res1)
+```
+
+```{r}
+all_opioid_data <- overdose_deaths %>% 
+  inner_join(drugs, by = "fipscounty") %>% 
+  mutate(prop_deaths = deaths_fipscounty / population * 100)
+
+```
+
+```{r}
+
+
+```
+

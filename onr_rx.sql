@@ -50,7 +50,7 @@ SELECT *
 FROM overdose_deaths
 ORDER BY fipscounty, year;
 
-/* What did the trend in overdose deaths due to opioids look like in Tennessee from 2015 to 2018? */
+/* Q3 What did the trend in overdose deaths due to opioids look like in Tennessee from 2015 to 2018? */
 SELECT year, SUM(overdose_deaths)
 FROM overdose_deaths
 GROUP BY year
@@ -69,7 +69,23 @@ SELECT year, SUM(overdose_deaths), fipscounty
 FROM overdose_deaths
 GROUP BY year, fipscounty
 
-/*Is there an association between rates of opioid prescriptions and overdose deaths by county?*/
+-- ANS: 
+SELECT *
+FROM drug AS d
+INNER JOIN prescription AS p2
+USING (drug_name)
+INNER JOIN prescriber AS p1
+USING (npi)
+INNER JOIN zip_fips AS z
+ON p1.nppes_provider_zip5 = z.zip
+INNER JOIN fips_county as f
+USING (fipscounty)
+INNER JOIN overdose_deaths as o
+USING (fipscounty)
+WHERE f.state = 'TN' AND opioid_drug_flag = 'Y' AND YEAR BETWEEN 2015 AND 2018
+ORDER BY overdose_deaths DESC;
+
+/*Q4 Is there an association between rates of opioid prescriptions and overdose deaths by county?*/
 SELECT f.fipscounty, f.county , SUM(total_claim_count) as total, population
 FROM drug AS d
 INNER JOIN prescription AS p2
@@ -151,7 +167,87 @@ SELECT
 		PARTITION BY zip
 		ORDER BY MAX(tot_ratio) DESC)
 FROM zip_fips
-WHERE fipscounty LIKE '47%' AND zip IN('37027', '37211') 
+WHERE fipscounty LIKE '47%' 
 GROUP BY fipscounty, zip;
 
 -- next step: if rank = 1 then fipscounty = our choice
+
+-- selecting 95 counties of interest in TN and the different zip code(s) within them
+WITH CTE AS (
+	SELECT
+	fipscounty, zip, MAX(tot_ratio) AS highest_ratio,
+	RANK() OVER(
+		PARTITION BY zip
+		ORDER BY MAX(tot_ratio) DESC)
+	FROM zip_fips
+	WHERE fipscounty LIKE '47%' 
+	GROUP BY fipscounty, zip
+	ORDER BY zip
+)
+SELECT DISTINCT(fipscounty)
+FROM CTE
+WHERE rank = 1;
+
+-- all counties in OD_Deaths have data for 4 years
+SELECT DISTINCT(fipscounty), ARRAY_AGG(year), COUNT(year)
+FROM overdose_deaths
+GROUP BY fipscounty
+ORDER BY COUNT(year);
+
+-- all years in OD_Deaths have a value
+SELECT overdose_deaths
+FROM overdose_deaths
+WHERE overdose_deaths IS NULL;
+
+-- query exploring how many overdose deaths per county between 2015 and 2018?
+-- PART A: this is our overdose deaths per county table
+SELECT fipscounty, SUM(overdose_deaths) AS deaths_fipscounty, population
+FROM overdose_deaths
+INNER JOIN population
+USING(fipscounty)
+GROUP BY fipscounty, population;
+
+-- exploring relationship between type of opioid and location
+-- population
+SELECT d.generic_name, d.drug_name, p1.total_day_supply
+FROM drug AS d
+INNER JOIN prescription AS p1
+USING(drug_name)
+WHERE opioid_drug_flag = 'Y'
+ORDER BY p1.total_day_supply DESC;
+
+31932
+31851
+
+81
+-- -------------------------------------------------------------------------------------------------
+-- | fips1 | zip1 | sum_death_fips1 | generic_name_zip1 | total_day_supply_zip1 | population_fips1 |
+-- | fips1 | zip2 | sum_death_fips1 | generic_name_zip2 | total_day_supply_zip2 | population_fips1 |
+-- | fips1 | zip3 | sum_death_fips1 | generic_name_zip3 | total_day_supply_zip3 | population_fips1 |
+-- -------------------------------------------------------------------------------------------------
+
+WITH CTE AS (
+	SELECT
+	fipscounty, zip, tot_ratio AS highest_ratio,
+	RANK() OVER(
+		PARTITION BY zip
+		ORDER BY tot_ratio DESC)
+	FROM zip_fips
+	WHERE fipscounty LIKE '47%'
+	ORDER BY zip
+),
+CTE2 AS (SELECT fipscounty, zip
+	FROM CTE
+	WHERE rank = 1)
+SELECT p.npi, CTE2.zip, CTE2.fipscounty, drug_name, generic_name, p.total_day_supply, p.total_claim_count
+FROM drug AS d
+INNER JOIN prescription as p
+USING (drug_name)
+INNER JOIN prescriber as p2
+USING (npi)
+INNER JOIN CTE2
+On p2.nppes_provider_zip5 = CTE2.zip
+WHERE opioid_drug_flag = 'Y'
+ORDER BY p.total_day_supply desc;
+
+
