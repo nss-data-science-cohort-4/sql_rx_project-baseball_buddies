@@ -35,7 +35,7 @@ To execute a query, we can use the dbSendQuery function
 ```{r}
 # proportion of opioid prescriptions (step 1)
 query = "With CTE AS (
-	SELECTasd
+	SELECT
 	fipscounty, zip, tot_ratio AS highest_ratio,
 	RANK() OVER(
 		PARTITION BY zip
@@ -70,8 +70,6 @@ Then to retrieve the results, we can use dbFetch. Note that you can fetch only a
 ```{r}
 prescribers <- dbFetch(res)
 
-View(prescribers)
-
 # It is good practice to clear the result after fetching what you need in order to free all resources associated with the result set. 
 dbClearResult(res)
 ```
@@ -94,7 +92,7 @@ prescribers1 %>%
 
 ```
 ```{r}
-# explorting overdose deaths by county
+# exploring overdose deaths by county
 query = "SELECT SUM(overdose_deaths), fipscounty
 FROM overdose_deaths
 GROUP BY fipscounty;"
